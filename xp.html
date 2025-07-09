@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Premium Video Player</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/plyr/3.7.8/plyr.css"/>
+    <style>
+        :root {
+            --primary-color: #00ff8c;
+            --secondary-color: #1e1e1e;
+            --accent-color: #ffffff;
+            --loading-bg: rgba(0, 0, 0, 0.95);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        #videoContainer {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Custom Player Styling */
+        .plyr--video {
+            height: 100%;
+        }
+
+        .plyr--full-ui input[type=range] {
+            color: var(--primary-color);
+        }
+
+        .plyr__control--overlaid {
+            background: var(--primary-color);
+        }
+
+        .plyr--video .plyr__control:hover {
+            background: var(--primary-color);
+        }
+
+        .plyr--full-ui input[type=range]::-webkit-slider-thumb {
+            background: var(--primary-color);
+        }
+
+        /* Loading Animation */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--loading-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loader {
+            width: 100px;
+            height: 100px;
+            position: relative;
+        }
+
+        .loader:before,
+        .loader:after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: var(--primary-color);
+        }
+
+        .loader:before {
+            animation: spin 1.5s linear infinite;
+        }
+
+        .loader:after {
+            border-top-color: var(--accent-color);
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Stream Info Panel */
+        .stream-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+            display: none;
+        }
+
+        .info-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-label {
+            color: var(--primary-color);
+            margin-right: 10px;
+        }
+
+        /* Error Message */
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+            z-index: 10000;
+        }
+
+        /* Custom Buffer Indicator */
+        .buffer-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: var(--primary-color);
+            opacity: 0.8;
+            transition: width 0.3s;
+            z-index: 101;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .stream-info {
+                top: 10px;
+                right: 10px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+    </div>
+
+    <div class="error-message" id="errorMessage">
+        An error occurred while loading the stream. Retrying...
+    </div>
+
+    <div id="videoContainer">
+        <video id="player" playsinline crossorigin>
+            <source type="application/x-mpegURL">
+        </video>
+        <div class="buffer-indicator" id="bufferIndicator"></div>
+    </div>
+
+    <div class="stream-info" id="streamInfo">
+        <div class="info-item">
+            <span class="info-label">Quality:</span>
+            <span id="qualityDisplay">Auto</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Bandwidth:</span>
+            <span id="bandwidthDisplay">0 Mbps</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Buffer:</span>
+            <span id="bufferDisplay">0s</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plyr/3.7.8/plyr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
+    <script>
+        class VideoPlayer {
+            constructor() {
+                this.videoElement = document.getElementById('player');
+                this.loadingOverlay = document.getElementById('loadingOverlay');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.streamInfo = document.getElementById('streamInfo');
+                this.bufferIndicator = document.getElementById('bufferIndicator');
+                this.qualityDisplay = document.getElementById('qualityDisplay');
+                this.bandwidthDisplay = document.getElementById('bandwidthDisplay');
+                this.bufferDisplay = document.getElementById('bufferDisplay');
+                this.hls = null;
+                this.player = null;
+                this.retryCount = 0;
+                this.maxRetries = 3;
+                this.streamUrl = new URLSearchParams(window.location.search).get('dtv');
+                
+                this.init();
+            }
+
+            init() {
+                // Security
+                this.setupSecurity();
+                
+                // Initialize player
+                this.initializePlayer();
+
+                // Add event listeners
+                this.addEventListeners();
+            }
+
+            setupSecurity() {
+                document.addEventListener('contextmenu', e => e.preventDefault());
+                document.addEventListener('keydown', e => {
+                    if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74))) {
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+            }
+
+            initializePlayer() {
+                if (!this.streamUrl) {
+                    this.showError('No stream URL provided');
+                    return;
+                }
+
+                const defaultOptions = {
+                    controls: [
+                        'play-large', 'play', 'progress', 'current-time',
+                        'duration', 'mute', 'volume', 'settings', 'fullscreen'
+                    ],
+                    settings: ['quality', 'speed'],
+                    keyboard: { focused: true, global: true },
+                    tooltips: { controls: true, seek: true },
+                    speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] }
+                };
+
+                if (Hls.isSupported()) {
+                    this.setupHLS(defaultOptions);
+                } else if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    this.setupNativeHLS(defaultOptions);
+                } else {
+                    this.showError('HLS is not supported in your browser');
+                }
+            }
+
+            setupHLS(playerOptions) {
+                this.hls = new Hls({
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 600,
+                    maxBufferSize: 60 * 1000 * 1000,
+                    maxBufferHole: 0.5,
+                    lowLatencyMode: true,
+                    backBufferLength: 90
+                });
+
+                this.hls.loadSource(this.streamUrl);
+                this.hls.attachMedia(this.videoElement);
+
+                this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    this.player = new Plyr(this.videoElement, playerOptions);
+                    this.hideLoading();
+                    this.streamInfo.style.display = 'block';
+                    this.startStreamMonitoring();
+                });
+
+                this.setupHLSErrorHandling();
+            }
+
+            setupHLSErrorHandling() {
+                this.hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                this.retryLoading();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                this.hls.recoverMediaError();
+                                break;
+                            default:
+                                this.retryLoading();
+                                break;
+                        }
+                    }
+                });
+            }
+
+            setupNativeHLS(playerOptions) {
+                this.videoElement.src = this.streamUrl;
+                this.player = new Plyr(this.videoElement, playerOptions);
+                this.hideLoading();
+            }
+
+            startStreamMonitoring() {
+                setInterval(() => {
+                    if (this.hls) {
+                        // Update quality display
+                        const currentLevel = this.hls.currentLevel;
+                        if (currentLevel !== -1) {
+                            const level = this.hls.levels[currentLevel];
+                            this.qualityDisplay.textContent = `${level.height}p`;
+                        } else {
+                            this.qualityDisplay.textContent = 'Auto';
+                        }
+
+                        // Update bandwidth display
+                        const bandwidth = this.hls.bandwidthEstimate;
+                        this.bandwidthDisplay.textContent = `${(bandwidth / 1000000).toFixed(2)} Mbps`;
+
+                        // Update buffer display
+                        if (this.videoElement.buffered.length) {
+                            const bufferEnd = this.videoElement.buffered.end(0);
+                            const bufferSize = bufferEnd - this.videoElement.currentTime;
+                            this.bufferDisplay.textContent = `${bufferSize.toFixed(1)}s`;
+                            
+                            // Update buffer indicator
+                            const duration = this.videoElement.duration;
+                            const width = (bufferEnd / duration) * 100;
+                            this.bufferIndicator.style.width = `${width}%`;
+                        }
+                    }
+                }, 1000);
+            }
+
+            addEventListeners() {
+                this.videoElement.addEventListener('waiting', () => {
+                    this.showLoading();
+                });
+
+                this.videoElement.addEventListener('playing', () => {
+                    this.hideLoading();
+                });
+
+                this.videoElement.addEventListener('error', () => {
+                    this.retryLoading();
+                });
+            }
+
+            retryLoading() {
+                if (this.retryCount < this.maxRetries) {
+                    this.retryCount++;
+                    this.showError(`Retrying... (${this.retryCount}/${this.maxRetries})`);
+                    setTimeout(() => {
+                        this.hls.loadSource(this.streamUrl);
+                        this.hideError();
+                    }, 2000);
+                } else {
+                    this.showError('Failed to load stream after multiple attempts');
+                }
+            }
+
+            showLoading() {
+                this.loadingOverlay.style.display = 'flex';
+            }
+
+            hideLoading() {
+                this.loadingOverlay.style.display = 'none';
+            }
+
+            showError(message) {
+                this.errorMessage.textContent = message;
+                this.errorMessage.style.display = 'block';
+            }
+
+            hideError() {
+                this.errorMessage.style.display = 'none';
+            }
+        }
+
+        // Initialize player when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const player = new VideoPlayer();
+        });
+    </script>
+</body>
+</html>

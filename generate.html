@@ -1,0 +1,21 @@
+<script>
+function generateMatchHTML(matchData) {
+    return `<div class="containermatch"><a href="${matchData.matchlink}" title=""><div class="col-md-4"><div class="matchlogo right"><img alt="" class="col-img" height="70" src="${matchData.img1}" title="" width="70"></div><div class="matchname right"> <b>${matchData.name1}</b> </div></div><div class="col-md-4"><div class="matchTime"><div class="stsrt" id="natija7578">${matchData.time}</div><div class="date style colorDefinition size_sm live" data-gameends="${matchData.endTime}" data-start="${matchData.startTime}" dir="rtl" id="8888">LIVE NOW </div></div></div><div class="col-md-4"><div class="matchlogo left"><img alt="" class="col-img left" height="70" src="${matchData.img2}" title="" width="70"></div><div class="matchname left"><b>${matchData.name2}</b></div></div><div class="col-md-4 info"><ul><li><span>Round 28</span></li><li><span>Watchasports</span></li><li><span class="lgnm">${matchData.ligue_name}</span></li></ul></div><div class="overlayMatch2"><div class="textMatch"></div></div></a></div>`;
+}
+
+// Example usage:
+const matchData = {
+    matchlink: "example.com/match",
+    img1: "img1.jpg",
+    img2: "img2.jpg",
+    name1: "Team A",
+    name2: "Team B",
+    time: "15:00",
+    startTime: "2024-04-13T19:00+05:30",
+    endTime: "2024-04-13T21:00+05:30",
+    ligue_name: "League X"
+};
+
+const htmlCode = generateMatchHTML(matchData);
+console.log(htmlCode);
+</script>
