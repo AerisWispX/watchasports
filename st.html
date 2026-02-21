@@ -192,36 +192,54 @@ document.getElementById("m3u8-url").setAttribute("src",maxvalue);
 </script>
 </body>
 <script>
-setTimeout(videovisible, 1000)
-
-function videovisible() {
-    document.getElementById('loading').style.display = 'none'
-}
 document.addEventListener("DOMContentLoaded", () => {
-    const e = document.querySelector("video"),
-        n = e.getElementsByTagName("source")[0].src,
-        o = {};
+
+    const video = document.querySelector("video");
+    const source = document.getElementById("m3u8-url").src;
+
     if (Hls.isSupported()) {
-        var config = {
-            maxMaxBufferLength: 100,
-        };
-        const t = new Hls(config);
-        t.loadSource(n), t.on(Hls.Events.MANIFEST_PARSED, function(n, l) {
-            const s = t.levels.map(e => e.height);
-            o.quality = {
-                default: s[0],
-                options: s,
-                forced: !0,
-                onChange: e => (function(e) {
-                    window.hls.levels.forEach((n, o) => {
-                        n.height === e && (window.hls.currentLevel = o)
-                    })
-                })(e)
-            };
-            new Plyr(e, o)
-        }), t.attachMedia(e), window.hls = t
-    } else {
-        new Plyr(e, o)
+
+        const hls = new Hls({
+            startLevel: 0,              // Start lowest quality (fast start)
+            maxBufferLength: 15,
+            maxMaxBufferLength: 30,
+            capLevelToPlayerSize: true,
+            enableWorker: true,
+            lowLatencyMode: true
+        });
+
+        hls.loadSource(source);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+
+            const levels = hls.levels.map(level => level.height);
+
+            const player = new Plyr(video, {
+                quality: {
+                    default: levels[0],
+                    options: levels,
+                    forced: true,
+                    onChange: (quality) => {
+                        hls.levels.forEach((level, index) => {
+                            if (level.height === quality) {
+                                hls.currentLevel = index;
+                            }
+                        });
+                    }
+                }
+            });
+
+            // After 8 seconds switch to AUTO
+            setTimeout(() => {
+                hls.currentLevel = -1;
+            }, 8000);
+
+        });
+
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = source;
+        new Plyr(video);
     }
 });
 </script>
